@@ -554,4 +554,57 @@ app.get("/api/getAIStatus", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+
+
+// API لإرسال رسالة لكل المستخدمين (Broadcast)
+app.post("/api/broadcast", async (req, res) => {
+  if (!req.session.authenticated) return res.status(401).json({ error: "Unauthorized" });
+
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: "Message is required" });
+
+  try {
+    // 1. نجيب كل الشاتات المسجلة عندنا
+    const snap = await db.ref("chats_list").once("value");
+    const chats = snap.val();
+
+    if (!chats) return res.json({ success: true, count: 0 });
+
+    const chatIds = Object.keys(chats);
+    let successCount = 0;
+
+    // 2. نلف عليهم واحد واحد
+    for (const chatId of chatIds) {
+      try {
+        const r = await axios.post(`${TELE_API}/sendMessage`, {
+          chat_id: chatId,
+          text: text,
+          parse_mode: "Markdown"
+        });
+
+        // 3. نحفظ الرسالة في الداتا بيس عشان تظهر في الشات
+        if (r.data.ok) {
+          await saveMessageToFirebase(chatId, r.data.result, true);
+          successCount++;
+        }
+
+        // تأخير بسيط (50 مللي ثانية) عشان نتجنب الحظر من تيليجرام لو العدد كبير
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+      } catch (err) {
+        console.error(`Failed to send to ${chatId}:`, err.message);
+        // بنكمل عادي حتى لو فشل مع واحد
+      }
+    }
+
+    res.json({ success: true, count: successCount });
+
+  } catch (e) {
+    res.status(500).json({ error: e.toString() });
+  }
+});
+
+
+
 server.listen(PORT, () => console.log("Server listening on", PORT));
