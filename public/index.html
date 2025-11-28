@@ -111,13 +111,45 @@
         border-radius: 5px;
       }
 
-      /* Sidebar */
+      /* Sidebar Styles */
       #sidebar {
         width: 320px;
         background: var(--bg-sidebar);
         border-right: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
+        /* السطرين دول جداد عشان الحركة الناعمة */
+        transition:
+          width 0.3s ease,
+          padding 0.3s ease;
+        overflow: hidden; /* عشان المحتوى يختفي لما يقفل */
+        white-space: nowrap; /* يمنع النص انه يبوظ لما السايد بار يصغر */
+      }
+
+      /* كلاس الإغلاق (هنضيفه بالجافاسكريبت) */
+      #sidebar.closed {
+        width: 0;
+        border: none;
+      }
+
+      /* زرار القائمة (Menu Toggle) */
+      #menu-toggle {
+        position: absolute;
+        top: 10px;
+        left: 15px;
+        z-index: 100; /* عشان يظهر فوق أي حاجة */
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--text-secondary);
+        background: var(--bg-sidebar); /* خلفية عشان يبان فوق الرسايل */
+        padding: 5px 10px;
+        border-radius: 5px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid var(--border-color);
+        user-select: none;
+      }
+      #menu-toggle:hover {
+        color: var(--accent-color);
       }
       #sidebar-header {
         padding: 15px;
@@ -530,7 +562,13 @@
             <span class="ai-icon">🤖</span> <span>AI Off</span>
           </div>
 
-          <div class="broadcast-btn" onclick="openBroadcastModal()" title="Send to All">📢</div>
+          <div
+            class="broadcast-btn"
+            onclick="openBroadcastModal()"
+            title="Send to All"
+          >
+            📢
+          </div>
 
           <span>Chats</span>
         </div>
@@ -549,6 +587,8 @@
     </div>
 
     <div id="content">
+      <div id="menu-toggle" onclick="toggleSidebar()">☰</div>
+
       <div id="chat-area"></div>
 
       <div id="input-wrapper">
@@ -571,19 +611,26 @@
       </div>
     </div>
 
-
     <div id="broadcast-modal" class="modal">
       <div class="modal-content">
         <h3>📢 Send to All Users</h3>
-        <p style="font-size: 13px; color: var(--text-secondary)">This message will be sent to ALL users in your database.</p>
-        <textarea id="broadcast-text" placeholder="Write your announcement here..."></textarea>
+        <p style="font-size: 13px; color: var(--text-secondary)">
+          This message will be sent to ALL users in your database.
+        </p>
+        <textarea
+          id="broadcast-text"
+          placeholder="Write your announcement here..."
+        ></textarea>
         <div class="modal-actions">
-          <button class="btn-cancel" onclick="closeBroadcastModal()">Cancel</button>
-          <button class="btn-confirm" onclick="sendBroadcast()">Send Now</button>
+          <button class="btn-cancel" onclick="closeBroadcastModal()">
+            Cancel
+          </button>
+          <button class="btn-confirm" onclick="sendBroadcast()">
+            Send Now
+          </button>
         </div>
       </div>
     </div>
-
 
     <!--- Scripts --->
 
@@ -734,6 +781,10 @@
         const r = await fetch("/api/messages/" + chatId);
         const msgs = await r.json();
         renderMessages(msgs);
+        // ضيف السطر ده: لو الشاشة أصغر من 768px اقفل السايد بار لما يختار شات
+        if (window.innerWidth < 768) {
+          document.getElementById("sidebar").classList.add("closed");
+        }
       }
 
       function renderMessages(msgsObj) {
@@ -984,7 +1035,6 @@
         } catch (e) {}
       })();
 
-
       // --- Broadcast Logic ---
       function openBroadcastModal() {
         document.getElementById("broadcast-modal").style.display = "flex";
@@ -1000,7 +1050,8 @@
         const text = document.getElementById("broadcast-text").value.trim();
         if (!text) return alert("Please write a message first!");
 
-        if (!confirm("Are you sure you want to send this to ALL users?")) return;
+        if (!confirm("Are you sure you want to send this to ALL users?"))
+          return;
 
         // تغيير الزرار لـ "جاري الإرسال"
         const btn = document.querySelector(".btn-confirm");
@@ -1012,7 +1063,7 @@
           const r = await fetch("/api/broadcast", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text })
+            body: JSON.stringify({ text }),
           });
           const data = await r.json();
 
@@ -1027,14 +1078,12 @@
       }
 
       // إغلاق النافذة لو ضغطت براها
-      window.onclick = function(event) {
+      window.onclick = function (event) {
         const modal = document.getElementById("broadcast-modal");
         if (event.target == modal) {
           closeBroadcastModal();
         }
-      }
-
-
+      };
 
       // --- تحسينات لوحة المفاتيح (Enter & Tab) ---
 
@@ -1064,12 +1113,26 @@
         // (إضافي) لو بدأ يكتب أي حروف وهو مش واقف في أي مكان، نوديه لمربع الكتابة
         // نتأكد إنه مش ضاغط Ctrl أو Alt عشان الاختصارات متضربش
         if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-            // نتأكد إنه مش واقف أصلاً في مربع بحث أو كتابة تاني
-            if (active.tagName !== "INPUT" && active.tagName !== "TEXTAREA") {
-                txtInput.focus();
-            }
+          // نتأكد إنه مش واقف أصلاً في مربع بحث أو كتابة تاني
+          if (active.tagName !== "INPUT" && active.tagName !== "TEXTAREA") {
+            txtInput.focus();
+          }
         }
       });
+
+      // --- Sidebar Toggle Logic ---
+      function toggleSidebar() {
+        const sidebar = document.getElementById("sidebar");
+        const btn = document.getElementById("menu-toggle");
+
+        // تبديل الكلاس (لو موجود يشيله، لو مش موجود يحطه)
+        sidebar.classList.toggle("closed");
+
+        // تغيير شكل الأيقونة (اختياري، حركة شياكة)
+        /* لو مقفول: يعرض سهم يمين (أو يفضل زي ما هو ☰)
+           هنسيبه ☰ حالياً عشان يكون بسيط
+        */
+      }
     </script>
   </body>
 </html>
