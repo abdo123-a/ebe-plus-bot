@@ -1,0 +1,50 @@
+[
+  {
+    "ts": 1764064926971,
+    "update": {
+      "update_id": 255750734,
+      "message": {
+        "message_id": 13,
+        "from": {
+          "id": 7116821062,
+          "is_bot": false,
+          "first_name": "Abdalrhman",
+          "username": "ABDO_1212",
+          "language_code": "en"
+        },
+        "chat": {
+          "id": 7116821062,
+          "first_name": "Abdalrhman",
+          "username": "ABDO_1212",
+          "type": "private"
+        },
+        "date": 1764064926,
+        "text": "."
+      }
+    }
+  },
+  {
+    "ts": 1764065081710,
+    "update": {
+      "update_id": 255750735,
+      "message": {
+        "message_id": 15,
+        "from": {
+          "id": 7116821062,
+          "is_bot": false,
+          "first_name": "Abdalrhman",
+          "username": "ABDO_1212",
+          "language_code": "en"
+        },
+        "chat": {
+          "id": 7116821062,
+          "first_name": "Abdalrhman",
+          "username": "ABDO_1212",
+          "type": "private"
+        },
+        "date": 1764065081,
+        "text": "واو"
+      }
+    }
+  }
+]
