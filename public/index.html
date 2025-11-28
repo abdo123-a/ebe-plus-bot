@@ -1033,6 +1033,43 @@
           closeBroadcastModal();
         }
       }
+
+
+
+      // --- تحسينات لوحة المفاتيح (Enter & Tab) ---
+
+      const txtInput = document.getElementById("text");
+
+      // 1. إرسال بـ Enter وسطر جديد بـ Shift+Enter
+      txtInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault(); // منع السطر الجديد
+          // نتأكد إننا مش بنبعت رسالة فاضية
+          if (txtInput.value.trim().length > 0) {
+            document.getElementById("send").click();
+          }
+        }
+      });
+
+      // 2. التركيز التلقائي عند الضغط على Tab أو الكتابة
+      document.addEventListener("keydown", (e) => {
+        const active = document.activeElement;
+
+        // لو ضغط Tab نحوله لمربع الكتابة
+        if (e.key === "Tab") {
+          e.preventDefault(); // منع التنقل العشوائي
+          txtInput.focus();
+        }
+
+        // (إضافي) لو بدأ يكتب أي حروف وهو مش واقف في أي مكان، نوديه لمربع الكتابة
+        // نتأكد إنه مش ضاغط Ctrl أو Alt عشان الاختصارات متضربش
+        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            // نتأكد إنه مش واقف أصلاً في مربع بحث أو كتابة تاني
+            if (active.tagName !== "INPUT" && active.tagName !== "TEXTAREA") {
+                txtInput.focus();
+            }
+        }
+      });
     </script>
   </body>
 </html>

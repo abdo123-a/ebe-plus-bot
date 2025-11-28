@@ -363,12 +363,16 @@ app.post("/api/sendText", async (req, res) => {
   }
 });
 
-// Send File
+// Send File (مع إصلاح الأسماء العربية)
 app.post("/api/sendFile", upload.single("file"), async (req, res) => {
   try {
     const { chat_id, reply_to_message_id } = req.body;
     const file = req.file;
     if (!file) return res.status(400).json({ error: "No file" });
+
+    // --- الحل السحري لإصلاح الاسم العربي ---
+    // بنحول الاسم لـ "بايتات" خام، وبنرجع نقرأه كـ UTF-8
+    file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
 
     let method = "sendDocument";
     if (file.mimetype.startsWith("image/")) method = "sendPhoto";
@@ -376,19 +380,22 @@ app.post("/api/sendFile", upload.single("file"), async (req, res) => {
 
     const form = new FormData();
     form.append("chat_id", chat_id);
-    const fieldName =
-      method === "sendPhoto"
-        ? "photo"
-        : method === "sendAudio"
-          ? "audio"
-          : "document";
-    form.append(fieldName, file.buffer, file.originalname);
+
+    const fieldName = method === "sendPhoto" ? "photo" : (method === "sendAudio" ? "audio" : "document");
+
+    // إرسال الملف مع تحديد الاسم والنوع بدقة
+    form.append(fieldName, file.buffer, {
+      filename: file.originalname,
+      contentType: file.mimetype
+    });
+
     if (reply_to_message_id)
       form.append("reply_to_message_id", reply_to_message_id);
 
     const r = await axios.post(`${TELE_API}/${method}`, form, {
       headers: form.getHeaders(),
     });
+
     if (r.data.ok) {
       await saveMessageToFirebase(chat_id, r.data.result, true);
       res.json(r.data);
@@ -409,14 +416,17 @@ app.post("/api/deleteChat", async (req, res) => {
   }
 });
 
-// استبدال دالة الـ Proxy بالكامل في index.js
-
+// تعديل نهائي لمشكلة أسماء الملفات العربية
 app.get("/api/proxyFile/:file_id", async (req, res) => {
   try {
     const file_id = req.params.file_id;
-    const fileName = req.query.name || "file";
+    // استقبال الاسم
+    let fileName = req.query.name || "file";
 
-    // 1. طلب مسار الملف من تيليجرام (تم التعديل لإرسال الـ Params بشكل آمن)
+    // تنظيف الاسم من علامات التنصيص اللي ممكن تبوظ الهيدر
+    fileName = fileName.replace(/"/g, ''); 
+
+    // طلب مسار الملف من تيليجرام
     const r = await axios.get(`${TELE_API}/getFile`, {
       params: { file_id: file_id },
     });
@@ -426,40 +436,31 @@ app.get("/api/proxyFile/:file_id", async (req, res) => {
     const filePath = r.data.result.file_path;
     const downloadUrl = `https://api.telegram.org/file/bot${TOKEN}/${filePath}`;
 
-    // 2. تحميل الملف كـ Stream
+    // تحميل الملف كـ Stream
     const response = await axios({
       method: "get",
       url: downloadUrl,
       responseType: "stream",
     });
 
-    // 3. ضبط الترويسة (Headers)
+    // ضبط النوع (PDF, Image, etc)
     res.setHeader("Content-Type", response.headers["content-type"]);
+
+    // --- الحل الجذري للاسم العربي ---
+    // 1. تشفير الاسم بالكامل (بيحول العربي لرموز %D8%A7...)
+    const encodedName = encodeURIComponent(fileName).replace(/['()]/g, escape);
+
+    // 2. استخدام filename* (بالنجمة) وده المعيار اللي بيفهم UTF-8
+    // شيلنا filename="file" عشان المتصفح يركز مع النجمة بس
     res.setHeader(
       "Content-Disposition",
-      `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      `inline; filename*=UTF-8''${encodedName}`
     );
 
-    // 4. تمرير الملف
     response.data.pipe(res);
   } catch (err) {
-    // تحسين عرض الخطأ لمعرفة السبب
-    const telegramError =
-      err.response && err.response.data
-        ? err.response.data.description
-        : err.message;
-    console.error("Proxy Error:", telegramError);
-
-    // إذا كان الخطأ 400 غالباً بسبب حجم الملف
-    if (err.response && err.response.status === 400) {
-      return res
-        .status(400)
-        .send(
-          `Telegram Error: ${telegramError} (Note: Bots cannot download files larger than 20MB)`,
-        );
-    }
-
-    res.status(500).send(`Server Error: ${telegramError}`);
+    console.error("Proxy Error:", err.message);
+    res.status(500).send("Server Error");
   }
 });
 
@@ -555,11 +556,10 @@ app.get("/api/getAIStatus", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-
-
 // API لإرسال رسالة لكل المستخدمين (Broadcast)
 app.post("/api/broadcast", async (req, res) => {
-  if (!req.session.authenticated) return res.status(401).json({ error: "Unauthorized" });
+  if (!req.session.authenticated)
+    return res.status(401).json({ error: "Unauthorized" });
 
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: "Message is required" });
@@ -580,7 +580,7 @@ app.post("/api/broadcast", async (req, res) => {
         const r = await axios.post(`${TELE_API}/sendMessage`, {
           chat_id: chatId,
           text: text,
-          parse_mode: "Markdown"
+          parse_mode: "Markdown",
         });
 
         // 3. نحفظ الرسالة في الداتا بيس عشان تظهر في الشات
@@ -590,8 +590,7 @@ app.post("/api/broadcast", async (req, res) => {
         }
 
         // تأخير بسيط (50 مللي ثانية) عشان نتجنب الحظر من تيليجرام لو العدد كبير
-        await new Promise(resolve => setTimeout(resolve, 50));
-
+        await new Promise((resolve) => setTimeout(resolve, 50));
       } catch (err) {
         console.error(`Failed to send to ${chatId}:`, err.message);
         // بنكمل عادي حتى لو فشل مع واحد
@@ -599,12 +598,9 @@ app.post("/api/broadcast", async (req, res) => {
     }
 
     res.json({ success: true, count: successCount });
-
   } catch (e) {
     res.status(500).json({ error: e.toString() });
   }
 });
-
-
 
 server.listen(PORT, () => console.log("Server listening on", PORT));
