@@ -164,12 +164,15 @@ io.on("connection", (socket) => {
   });
 });
 
-
 // دالة لتجهيز تاريخ المحادثة للذكاء الاصطناعي
 async function getChatHistory(chatId) {
   try {
     // هات آخر 10 رسايل بس عشان السرعة والتكلفة
-    const snap = await db.ref(`messages/${chatId}`).orderByKey().limitToLast(10).once('value');
+    const snap = await db
+      .ref(`messages/${chatId}`)
+      .orderByKey()
+      .limitToLast(10)
+      .once("value");
     const data = snap.val();
 
     if (!data) return [];
@@ -177,17 +180,17 @@ async function getChatHistory(chatId) {
     const history = [];
 
     // تحويل رسايل فايربيس لتنسيق Gemini
-    Object.values(data).forEach(item => {
+    Object.values(data).forEach((item) => {
       const msg = item.message;
       // نتأكد إن الرسالة فيها نص (مش صورة أو ملف)
       if (msg.text) {
         // لو الرسالة من الموقع (is_site) يبقى دي رد البوت (model)
         // لو مفيش is_site يبقى دي رسالة المستخدم (user)
-        const role = (msg.from && msg.from.is_site) ? "model" : "user";
+        const role = msg.from && msg.from.is_site ? "model" : "user";
 
         history.push({
           role: role,
-          parts: [{ text: msg.text }]
+          parts: [{ text: msg.text }],
         });
       }
     });
@@ -199,7 +202,26 @@ async function getChatHistory(chatId) {
   }
 }
 
+// دالة لتحميل الصورة من تيليجرام وتحويلها لـ Base64
+async function downloadImageAsBase64(fileId) {
+  try {
+    // 1. نجيب مسار الملف من تيليجرام
+    const res = await axios.get(`${TELE_API}/getFile?file_id=${fileId}`);
+    const filePath = res.data.result.file_path;
+    const downloadUrl = `https://api.telegram.org/file/bot${TOKEN}/${filePath}`;
 
+    // 2. نحمل الصورة كـ ArrayBuffer
+    const imageRes = await axios.get(downloadUrl, {
+      responseType: "arraybuffer",
+    });
+
+    // 3. نحولها لـ Base64
+    return Buffer.from(imageRes.data).toString("base64");
+  } catch (e) {
+    console.error("Error downloading image:", e.message);
+    return null;
+  }
+}
 
 // --- Routes ---
 
@@ -233,36 +255,68 @@ app.post("/webhook", async (req, res) => {
     // 1. حفظ رسالة المستخدم أولاً
     await saveMessageToFirebase(chatId, msg, false);
 
-    // 2. التحقق لو وضع الـ AI شغال والرسالة نصية
-    if (aiEnabled && msg.text) {
+    // 2. التحقق لو وضع الـ AI شغال (والرسالة فيها نص أو صورة)
+    if (aiEnabled && (msg.text || msg.caption || msg.photo)) {
       try {
-        await axios.post(`${TELE_API}/sendChatAction`, { chat_id: chatId, action: "typing" });
+        await axios.post(`${TELE_API}/sendChatAction`, {
+          chat_id: chatId,
+          action: "typing",
+        });
 
-        // 1. هات تاريخ المحادثة السابق
+        // --- تجهيز محتوى الرسالة الحالية (نص + صورة محتملة) ---
+        const currentParts = [];
+
+        // 1. لو فيه نص أو كابشن للصورة
+        const userText = msg.text || msg.caption;
+        if (userText) {
+          currentParts.push({ text: userText });
+        } else if (msg.photo) {
+          // لو بعت صورة من غير كلام، نعتبره بيسأل "إيه ده؟"
+          currentParts.push({ text: "ماذا يوجد في هذه الصورة؟" });
+        }
+
+        // 2. لو فيه صورة
+        if (msg.photo) {
+          // تيليجرام بيبعت الصورة بأحجام مختلفة، بناخد آخر واحد (أعلى جودة)
+          const photoObj = msg.photo[msg.photo.length - 1];
+          const base64Image = await downloadImageAsBase64(photoObj.file_id);
+
+          if (base64Image) {
+            currentParts.push({
+              inline_data: {
+                mime_type: "image/jpeg",
+                data: base64Image,
+              },
+            });
+          }
+        }
+
+        // --- تجميع التاريخ والرسالة ---
         const history = await getChatHistory(chatId);
-
-        // 2. ضيف التعليمات الأساسية (System Instruction)
-        // بنحطها كأنها أول رسالة من المستخدم عشان نضمن إن البوت يلتزم بالشخصية
         const systemPrompt = {
           role: "user",
-          parts: [{ text: "تصرف كمساعد شخصي ذكي ومحترم اسمك هو ايبي بلس (ebe plus). رد باللهجة التي تجدها مناسبة او بلهجة المستخدم او باللغة العربية الفصحى. المعلومات التي سأذكرها لك الآن تخص هذا المستخدم فقط. مطورك اسمه عبدالرحمن (abdo)" }]
+          parts: [
+            {
+              text: "تصرف كمساعد شخصي ذكي ومحترم اسمك هو ايبي بلس (ebe plus). رد باللهجة التي تجدها مناسبة او بلهجة المستخدم او باللغة العربية الفصحى. المعلومات التي سأذكرها لك الآن تخص هذا المستخدم فقط. مطورك اسمه عبدالرحمن (abdo)",
+            },
+          ],
         };
 
         // 3. ضيف الرسالة الجديدة اللي لسه واصلة دلوقتي
-        // (ملحوظة: إحنا مش محتاجين نضيفها يدوي لو هي اتحفظت في الداتا بيس وجت مع الهيستوري، 
+        // (ملحوظة: إحنا مش محتاجين نضيفها يدوي لو هي اتحفظت في الداتا بيس وجت مع الهيستوري،
         // بس عشان نضمن إنها آخر حاجة، هنبعت الهيستوري القديم + الرسالة الجديدة)
 
         const currentMessage = {
           role: "user",
-          parts: [{ text: msg.text }]
+          parts: currentParts,
         };
 
         // تجميع كل حاجة: التعليمات + التاريخ القديم + الرسالة الجديدة
         const fullConversation = [systemPrompt, ...history, currentMessage];
 
-        // إرسال الطلب لـ Gemini
+        // --- الإرسال لـ Gemini ---
         const response = await axios.post(GEMINI_URL, {
-          contents: fullConversation
+          contents: fullConversation,
         });
 
         const aiResponse = response.data.candidates[0].content.parts[0].text;
@@ -271,15 +325,23 @@ app.post("/webhook", async (req, res) => {
         const r = await axios.post(`${TELE_API}/sendMessage`, {
           chat_id: chatId,
           text: aiResponse,
-          parse_mode: "Markdown"
+          parse_mode: "Markdown",
         });
 
         if (r.data.ok) {
-           await saveMessageToFirebase(chatId, r.data.result, true);
+          await saveMessageToFirebase(chatId, r.data.result, true);
         }
-
       } catch (error) {
-        console.error("AI Error:", error.response ? error.response.data : error.message);
+        console.error(
+          "AI Vision Error:",
+          error.response ? error.response.data : error.message,
+        );
+        if (aiEnabled) {
+          axios.post(`${TELE_API}/sendMessage`, {
+            chat_id: chatId,
+            text: "معلش، حصل مشكلة وأنا بحاول أشوف الصورة دي 😅",
+          });
+        }
       }
     }
   }
