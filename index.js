@@ -1,4 +1,5 @@
 // index.js
+require("dotenv").config();
 const express = require("express");
 const session = require("express-session"); // مكتبة الجلسات
 const axios = require("axios");
@@ -8,6 +9,20 @@ const bodyParser = require("body-parser");
 const multer = require("multer");
 const FormData = require("form-data");
 const admin = require("firebase-admin");
+
+// --- إعدادات AI ---
+// const { GoogleGenerativeAI } = require("@google/generative-ai");
+// // احصل على مفتاح مجاني من: https://aistudio.google.com/app/apikey
+// const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+//new--
+
+// رابط Gemini المباشر (أضمن وأسرع)
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+let aiEnabled = false; // متغير لحفظ حالة الذكاء الاصطناعي
+
+//-----
 
 // --- إعدادات فايربيس ---
 const firebaseKey = JSON.parse(process.env.FIREBASE_KEY);
@@ -149,6 +164,43 @@ io.on("connection", (socket) => {
   });
 });
 
+
+// دالة لتجهيز تاريخ المحادثة للذكاء الاصطناعي
+async function getChatHistory(chatId) {
+  try {
+    // هات آخر 10 رسايل بس عشان السرعة والتكلفة
+    const snap = await db.ref(`messages/${chatId}`).orderByKey().limitToLast(10).once('value');
+    const data = snap.val();
+
+    if (!data) return [];
+
+    const history = [];
+
+    // تحويل رسايل فايربيس لتنسيق Gemini
+    Object.values(data).forEach(item => {
+      const msg = item.message;
+      // نتأكد إن الرسالة فيها نص (مش صورة أو ملف)
+      if (msg.text) {
+        // لو الرسالة من الموقع (is_site) يبقى دي رد البوت (model)
+        // لو مفيش is_site يبقى دي رسالة المستخدم (user)
+        const role = (msg.from && msg.from.is_site) ? "model" : "user";
+
+        history.push({
+          role: role,
+          parts: [{ text: msg.text }]
+        });
+      }
+    });
+
+    return history;
+  } catch (error) {
+    console.error("Error fetching history:", error);
+    return [];
+  }
+}
+
+
+
 // --- Routes ---
 
 // Login API
@@ -175,7 +227,61 @@ app.post("/webhook", async (req, res) => {
     if (status === "kicked" || status === "left")
       await deleteChatData(update.my_chat_member.chat.id);
   } else if (update.message) {
-    await saveMessageToFirebase(update.message.chat.id, update.message, false);
+    const msg = update.message;
+    const chatId = msg.chat.id;
+
+    // 1. حفظ رسالة المستخدم أولاً
+    await saveMessageToFirebase(chatId, msg, false);
+
+    // 2. التحقق لو وضع الـ AI شغال والرسالة نصية
+    if (aiEnabled && msg.text) {
+      try {
+        await axios.post(`${TELE_API}/sendChatAction`, { chat_id: chatId, action: "typing" });
+
+        // 1. هات تاريخ المحادثة السابق
+        const history = await getChatHistory(chatId);
+
+        // 2. ضيف التعليمات الأساسية (System Instruction)
+        // بنحطها كأنها أول رسالة من المستخدم عشان نضمن إن البوت يلتزم بالشخصية
+        const systemPrompt = {
+          role: "user",
+          parts: [{ text: "تصرف كمساعد شخصي ذكي ومحترم اسمك هو ايبي بلس (ebe plus). رد باللهجة التي تجدها مناسبة او بلهجة المستخدم او باللغة العربية الفصحى. المعلومات التي سأذكرها لك الآن تخص هذا المستخدم فقط. مطورك اسمه عبدالرحمن (abdo)" }]
+        };
+
+        // 3. ضيف الرسالة الجديدة اللي لسه واصلة دلوقتي
+        // (ملحوظة: إحنا مش محتاجين نضيفها يدوي لو هي اتحفظت في الداتا بيس وجت مع الهيستوري، 
+        // بس عشان نضمن إنها آخر حاجة، هنبعت الهيستوري القديم + الرسالة الجديدة)
+
+        const currentMessage = {
+          role: "user",
+          parts: [{ text: msg.text }]
+        };
+
+        // تجميع كل حاجة: التعليمات + التاريخ القديم + الرسالة الجديدة
+        const fullConversation = [systemPrompt, ...history, currentMessage];
+
+        // إرسال الطلب لـ Gemini
+        const response = await axios.post(GEMINI_URL, {
+          contents: fullConversation
+        });
+
+        const aiResponse = response.data.candidates[0].content.parts[0].text;
+
+        // إرسال الرد وتخزينه
+        const r = await axios.post(`${TELE_API}/sendMessage`, {
+          chat_id: chatId,
+          text: aiResponse,
+          parse_mode: "Markdown"
+        });
+
+        if (r.data.ok) {
+           await saveMessageToFirebase(chatId, r.data.result, true);
+        }
+
+      } catch (error) {
+        console.error("AI Error:", error.response ? error.response.data : error.message);
+      }
+    }
   }
   res.sendStatus(200);
 });
@@ -371,6 +477,18 @@ app.post("/api/editMessage", async (req, res) => {
     console.error("Edit Error:", err.message);
     res.status(500).json({ error: err.toString() });
   }
+});
+
+// API لتغيير وضع الذكاء الاصطناعي
+app.post("/api/toggleAI", (req, res) => {
+  aiEnabled = !aiEnabled;
+  console.log("AI Mode:", aiEnabled ? "ON" : "OFF");
+  res.json({ status: aiEnabled });
+});
+
+// API لمعرفة حالة الذكاء الاصطناعي عند فتح الموقع
+app.get("/api/getAIStatus", (req, res) => {
+  res.json({ status: aiEnabled });
 });
 
 const PORT = process.env.PORT || 3000;

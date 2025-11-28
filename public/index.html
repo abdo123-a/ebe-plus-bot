@@ -408,6 +408,31 @@
         font-size: 18px;
         margin-right: 10px;
       }
+
+      /* AI Toggle Button Style */
+      .ai-toggle-btn {
+        cursor: pointer;
+        font-size: 14px;
+        padding: 5px 10px;
+        border-radius: 15px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-input);
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        transition: 0.3s;
+        margin-right: 10px;
+      }
+      .ai-toggle-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: transparent;
+        box-shadow: 0 2px 5px rgba(118, 75, 162, 0.4);
+      }
+      .ai-icon {
+        font-size: 16px;
+      }
     </style>
   </head>
   <body>
@@ -425,6 +450,11 @@
           <span id="theme-btn" onclick="toggleTheme()" title="Toggle Dark Mode"
             >🌙</span
           >
+
+          <div id="ai-btn" class="ai-toggle-btn" onclick="toggleAI()">
+            <span class="ai-icon">🤖</span> <span>AI Off</span>
+          </div>
+
           <span>Chats</span>
         </div>
         <span
@@ -828,6 +858,38 @@
         const data = await r.json();
         alert(JSON.stringify(data, null, 2));
       }
+
+      // --- AI Logic ---
+      async function toggleAI() {
+        try {
+          const r = await fetch("/api/toggleAI", { method: "POST" });
+          const data = await r.json();
+          updateAIUI(data.status);
+        } catch (e) {
+          console.error("Failed to toggle AI");
+        }
+      }
+
+      function updateAIUI(isActive) {
+        const btn = document.getElementById("ai-btn");
+        const txt = btn.querySelector("span:last-child");
+        if (isActive) {
+          btn.classList.add("active");
+          txt.innerText = "AI Active";
+        } else {
+          btn.classList.remove("active");
+          txt.innerText = "AI Off";
+        }
+      }
+
+      // جلب حالة الـ AI عند فتح الصفحة
+      (async () => {
+        try {
+          const r = await fetch("/api/getAIStatus");
+          const data = await r.json();
+          updateAIUI(data.status);
+        } catch (e) {}
+      })();
     </script>
   </body>
 </html>
