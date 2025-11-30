@@ -91,7 +91,7 @@
         width: 100%;
         height: 100%;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        z-index: 2000;
+        z-index: 5000;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -302,11 +302,11 @@
         }
       }
 
-      /* Menu Toggle Button - Enhanced for mobile */
+      /* Menu Toggle Button - Smart Position */
       #menu-toggle {
         position: fixed;
         top: 15px;
-        left: 15px;
+        left: 15px; /* المكان الطبيعي لما السايد بار مقفول */
         z-index: 2000;
         font-size: 24px;
         cursor: pointer;
@@ -317,7 +317,12 @@
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         border: 1px solid var(--border-color);
         user-select: none;
-        transition: all 0.3s ease;
+        transition: left 0.3s ease; /* أهم سطر: عشان الحركة تكون ناعمة */
+      }
+
+      /* الكلاس ده هنضيفه لما السايد بار يكون مفتوح */
+      #menu-toggle.shifted {
+        left: 335px; /* عرض السايد بار (320) + مسافة (15) */
       }
 
       #menu-toggle:hover {
@@ -325,16 +330,11 @@
         transform: scale(1.05);
       }
 
-      #menu-toggle:active {
-        transform: scale(0.95);
-      }
-
-      @media (max-width: 768px) {
-        #menu-toggle {
-          top: 10px;
-          left: 10px;
-          padding: 6px 10px;
-          font-size: 20px;
+      /* تعديل للموبايل عشان الزرار ميبعدش أوي ويخرج بره الشاشة */
+      @media (max-width: 480px) {
+        #menu-toggle.shifted {
+          left: 270px; /* نخليه لازق في طرف السايد بار من جوه شوية */
+          background: rgba(255,255,255,0.9); /* عشان يبان لو فوق كلام */
         }
       }
 
@@ -1827,10 +1827,31 @@
       });
 
       // --- Sidebar Toggle Logic ---
+      // --- Sidebar Toggle Logic (Smart Button) ---
       function toggleSidebar() {
         const sidebar = document.getElementById("sidebar");
+        const btn = document.getElementById("menu-toggle");
+
         sidebar.classList.toggle("closed");
+
+        // لو السايد بار مش مقفول (يعني مفتوح) -> زحزح الزرار
+        if (!sidebar.classList.contains("closed")) {
+          btn.classList.add("shifted");
+        } else {
+          btn.classList.remove("shifted");
+        }
       }
+
+      // تشغيل الكود مرة واحدة عند فتح الموقع لضبط مكان الزرار
+      // لأن السايد بار بيبدأ مفتوح، فلازم نزيح الزرار من البداية
+      document.addEventListener("DOMContentLoaded", () => {
+         const sidebar = document.getElementById("sidebar");
+         const btn = document.getElementById("menu-toggle");
+         // لو الشاشة كبيرة (كمبيوتر) والسايد بار مفتوح، حرك الزرار
+         if (window.innerWidth >= 768 && !sidebar.classList.contains("closed")) {
+             btn.classList.add("shifted");
+         }
+      });
 
       // Auto-close sidebar overlay on window resize
       window.addEventListener("resize", () => {
