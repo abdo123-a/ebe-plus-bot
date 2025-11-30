@@ -17,115 +17,125 @@
     ></script>
 
     <link rel="stylesheet" href="/style.css" />
-    
   </head>
   <body>
-    <div id="login-overlay">
-      <div class="login-logo">
-        <div class="logo-icon">⚡</div>
-        <div class="logo-text">Telegram Command</div>
-        <div class="logo-subtitle">Admin Panel</div>
+    <body>
+      <div id="login-overlay">
+        <div class="login-logo">
+          <div class="logo-icon"></div>
+          <div class="logo-text">Ebe Bot</div>
+          <div class="logo-subtitle">Command Center</div>
+        </div>
+        <div id="login-box">
+          <h3>🔐 Welcome Back</h3>
+          <input
+            type="password"
+            id="pass-input"
+            placeholder="Enter Admin Password"
+          />
+          <button onclick="doLogin()">Sign In</button>
+        </div>
       </div>
-      <div id="login-box">
-        <h3>🔐 Enter Password</h3>
-        <input type="password" id="pass-input" placeholder="Admin Password" />
-        <button onclick="doLogin()">Login</button>
-      </div>
-    </div>
 
-    <div id="sidebar">
-      <div id="sidebar-header">
-        <div style="width: 100%">
-          <div class="sidebar-logo">
-            <div class="sidebar-logo-icon">⚡</div>
-            <div class="sidebar-logo-text">Command Center</div>
+      <div id="sidebar">
+        <div id="sidebar-header">
+          <div style="width: 100%">
+            <div class="sidebar-logo">
+              <div class="sidebar-logo-icon">Ebe</div>
+              <div class="sidebar-logo-text">Ebe Bot</div>
+            </div>
+            <div class="header-controls" style="margin-top: 12px">
+              <span id="theme-btn" onclick="toggleTheme()" title="Toggle Theme"
+                >🌙</span
+              >
+              <div id="ai-btn" class="ai-toggle-btn" onclick="toggleAI()">
+                <span class="ai-icon">🤖</span> <span>AI Off</span>
+              </div>
+              <div
+                class="broadcast-btn"
+                onclick="openBroadcastModal()"
+                title="Broadcast Message"
+              >
+                📢
+              </div>
+              <span
+                class="help-text"
+                onclick="alert('Double click any message to reply!')"
+                title="Help"
+              >
+                ❓
+              </span>
+            </div>
           </div>
-          <div class="header-controls" style="margin-top: 10px">
-            <span
-              id="theme-btn"
-              onclick="toggleTheme()"
-              title="Toggle Dark Mode"
-              >🌙</span
+        </div>
+
+        <div id="search-box">
+          <input
+            type="text"
+            id="search-input"
+            placeholder="🔍 Search conversations..."
+          />
+        </div>
+
+        <div id="chat-list"></div>
+      </div>
+
+      <div id="content">
+        <div id="menu-toggle" onclick="toggleSidebar()">☰</div>
+
+        <div id="chat-area"></div>
+
+        <div id="input-wrapper">
+          <emoji-picker class="light"></emoji-picker>
+
+          <div id="reply-bar">
+            <div>Replying to <span id="reply-to-name">User</span></div>
+            <div id="close-reply">✕</div>
+          </div>
+
+          <div id="input-area">
+            <input type="file" id="file-input" style="display: none" />
+            <label for="file-input" class="icon-btn" title="Attach File"
+              >📎</label
             >
-            <div id="ai-btn" class="ai-toggle-btn" onclick="toggleAI()">
-              <span class="ai-icon">🤖</span> <span>AI Off</span>
-            </div>
-            <div
-              class="broadcast-btn"
-              onclick="openBroadcastModal()"
-              title="Send to All"
-            >
-              📢
-            </div>
-            <span
-              class="help-text"
-              onclick="alert('Double click a message to reply!')"
-              title="Help"
-              >❓</span
-            >
+            <div id="emoji-btn" class="icon-btn" title="Emoji">😀</div>
+            <textarea
+              id="text"
+              placeholder="Type a message..."
+              rows="1"
+            ></textarea>
+            <button id="send">Send</button>
           </div>
         </div>
       </div>
 
-      <div id="search-box">
-        <input type="text" id="search-input" placeholder="🔍 Search chat..." />
-      </div>
-
-      <div id="chat-list"></div>
-    </div>
-
-    <div id="content">
-      <div id="menu-toggle" onclick="toggleSidebar()">☰</div>
-
-      <div id="chat-area"></div>
-
-      <div id="input-wrapper">
-        <emoji-picker class="light"></emoji-picker>
-
-        <div id="reply-bar">
-          <div>Replying to <span id="reply-to-name">User</span></div>
-          <div id="close-reply">✕</div>
-        </div>
-
-        <div id="input-area">
-          <input type="file" id="file-input" style="display: none" />
-          <label for="file-input" class="icon-btn" title="Attach File"
-            >📎</label
-          >
-          <div id="emoji-btn" class="icon-btn" title="Emoji">😀</div>
+      <div id="broadcast-modal" class="modal">
+        <div class="modal-content">
+          <h3>📢 Broadcast to All Users</h3>
+          <p style="font-size: 13px; color: var(--text-secondary)">
+            This message will be sent to ALL users in your database.
+          </p>
           <textarea
-            id="text"
-            placeholder="Type a message..."
-            rows="1"
+            id="broadcast-text"
+            placeholder="Write your announcement here..."
           ></textarea>
-          <button id="send">Send</button>
+          <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeBroadcastModal()">
+              Cancel
+            </button>
+            <button class="btn-confirm" onclick="sendBroadcast()">
+              Send Now
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div id="broadcast-modal" class="modal">
-      <div class="modal-content">
-        <h3>📢 Send to All Users</h3>
-        <p style="font-size: 13px; color: var(--text-secondary)">
-          This message will be sent to ALL users in your database.
-        </p>
-        <textarea
-          id="broadcast-text"
-          placeholder="Write your announcement here..."
-        ></textarea>
-        <div class="modal-actions">
-          <button class="btn-cancel" onclick="closeBroadcastModal()">
-            Cancel
-          </button>
-          <button class="btn-confirm" onclick="sendBroadcast()">
-            Send Now
-          </button>
-        </div>
-      </div>
-    </div>
+      <script src="/socket.io/socket.io.js"></script>
+      <script src="script.js"></script>
+    </body>
 
     <script src="/socket.io/socket.io.js"></script>
-    
+
     <script src="script.js"></script>
   </body>
 </html>
